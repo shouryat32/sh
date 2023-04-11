@@ -1,8 +1,18 @@
 import ijson
 import json
+import time
 from collections import defaultdict
 import pandas as pd
 from mpi4py import MPI
+def read_json_parallel(filename, chunk_size, rank, size):
+    with open(filename, "r", encoding="utf8") as file:
+        for i, chunk in enumerate(ijson.items(file, "item")):
+            # Distribute the chunks across processes
+            if i % size == rank:
+                yield chunk
+
+
+start_time = time.time()
 # Define the MPI communicator
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
@@ -11,14 +21,10 @@ size = comm.Get_size()
 json_filename_twitter = "twitter-data-small.json"
 json_filename_location = 'sal.json'
 comm.Barrier()
-# Read the JSON data in parallel
 chunk_size = 10000
 chunks = defaultdict(list)
-with open(json_filename_twitter, "r", encoding="utf8") as file:
-    for i, chunk in enumerate(ijson.items(file, "item")):
-        # Distribute the chunks across processes
-        if i % size == rank:
-            chunks[i // chunk_size].append(chunk)
+for chunk in read_json_parallel(json_filename_twitter, chunk_size, rank, size):
+    chunks[rank // chunk_size].append(chunk)
 # Concatenate the data into a Pandas DataFrame
 df = pd.DataFrame()
 for chunk in chunks.values():
@@ -55,7 +61,6 @@ for row in df_selected.itertuples(index=False):
         location_count[area_belong]+=1
         oldval=str(greater_area_count.get(row.author_id,''))
         greater_area_count[row.author_id]+=","+area_belong if greater_area_count[row.author_id] else area_belong
-print("Greater Capital City \t Number of Tweets Made")
 comm.Barrier()
 # Count the number of tweets made by each author
 value_counts = dict(df_selected["author_id"].value_counts())
@@ -63,7 +68,9 @@ value_counts = dict(df_selected["author_id"].value_counts())
 results_taks2=comm.gather(location_count,root=0)
 results = comm.gather(value_counts, root=0)
 results_task3=comm.gather(dict(greater_area_count),root=0)
+
 # Print the results on the root process
+comm.barrier()
 if rank == 0:
     #for task 1
     my_dict_task1={} 
@@ -98,25 +105,27 @@ if rank == 0:
     #for task 3
     my_dict_task3={}
     for i, value_counts in enumerate(results_task3): 
-        for j, (key, val) in enumerate(value_counts.items()): 
-            if key!='':
+        for j, (key, val) in enumerate(value_counts.items()):
                 if key not in my_dict_task3:
                     my_dict_task3[key]=val
                 elif (key in my_dict_task3):
-                    my_dict_task3[key]+=val
+                    my_dict_task3[key]+=","+val
     final_val=defaultdict(dict)
     for key,val in my_dict_task3.items():
         temp=val.split(",")
         for x in temp:
             if(x!=""):
                 final_val[key][x]=temp.count(x)
-    final_val=dict( sorted(final_val.items(), key=lambda x: len(x[1])))
+    final_val=dict( sorted(final_val.items(), key=lambda x: len(x[1]),reverse=True))
     print("Rank \t Author  \t  Id Number of Unique City Locations and #Tweet")
     count=1
     for key,value in final_val.items():
-        if count<=10:
-            y=', '.join([f'#{v}{k[1:]}' for k,v in value.items()] )
-            print(f"{count:<6}\t{key:<18}\t{len(value)}(#{sum(value.values())} tweets - {y})")
+            if(count<10):
+                y=', '.join([f'#{v}{k[1:]}' for k,v in value.items()] )
+                print(f"{count:<6}\t{key:<18}\t{len(value)}(#{sum(value.values())} tweets - {y})")
+            else:
+                break
             count+=1
-        else:
-            break
+    end_time=time.time()
+    total_runtime_minutes = (end_time-start_time) / 60
+    print("Total runtime (in minutes):", total_runtime_minutes)
