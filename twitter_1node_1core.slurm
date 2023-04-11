@@ -16,6 +16,6 @@ source ~/virtualenv/python3.8.6/bin/activate
 # Activate your virtual environment if necessary
 # source activate my_virtual_env
 # Change to your working directory
-cd /path/to/your/working/directory
+cd ~\assignment_1
 # Run your MPI-based Python script
 srun mpiexec -np 1 python main.py
