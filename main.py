@@ -1,31 +1,15 @@
 import ijson
 import json
-import tarfile
 from collections import defaultdict
 import pandas as pd
 from mpi4py import MPI
-import sys
-
-
 # Define the MPI communicator
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
 size = comm.Get_size()
-
 # Define the file names
-file_name=sys.argv[1]
-print(file_name)
-tar_filename_twitter = 'twitter-data-small.json.tar.gz'
-json_filename_twitter = 'twitter-data-small.json'
-tar_filename_location = 'sal.json.tar.gz'
+json_filename_twitter = "twitter-data-small.json"
 json_filename_location = 'sal.json'
-# Extract the JSON file from the compressed tar file
-if rank == 0:
-    with tarfile.open(tar_filename_twitter, 'r:gz') as tar:
-        tar.extract(json_filename_twitter)
-with tarfile.open(tar_filename_location, 'r:gz') as tar:
-    tar.extract(json_filename_location)   
-# Wait for rank 0 to extract the file before continuing
 comm.Barrier()
 # Read the JSON data in parallel
 chunk_size = 10000
